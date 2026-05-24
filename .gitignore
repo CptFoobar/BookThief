@@ -1,0 +1,29 @@
+# Backend
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/.venv/
+backend/venv/
+backend/env/
+backend/.env
+backend/downloads.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+frontend/.env
+frontend/.env.*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.vscode/
+
+# Project level
+downloads/
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

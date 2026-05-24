@@ -1,0 +1,19 @@
+body {
+  background-color: #f7f7d4;
+  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+}
+
+/* Torn paper effect for banner */
+.torn-paper {
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+  clip-path: polygon(
+    2% 2%, 98% 1%, 99% 90%, 
+    95% 85%, 90% 95%, 85% 88%, 80% 92%, 75% 86%, 
+    70% 94%, 65% 87%, 60% 93%, 55% 89%, 50% 96%, 
+    45% 88%, 40% 92%, 35% 86%, 30% 95%, 25% 87%, 
+    20% 93%, 15% 89%, 10% 96%, 5% 88%, 1% 94%
+  );
+}
+
