@@ -62,17 +62,24 @@ function App() {
   };
 
   const handleDownload = async (book, sendToKindle = false) => {
-    const notificationId = sendToKindle ? `kindle-${book.id}` : book.id;
+    const notificationId = `dl-${book.id}-${Date.now()}`;
     const title = sendToKindle ? 'Kindle Sync' : 'Downloading';
     const message = sendToKindle ? `Starting Kindle sync for ${book.title}` : `Started downloading ${book.title}`;
 
+    console.log(`Starting download: ${book.title} (ID: ${book.id}, Kindle: ${sendToKindle})`);
+
     notifications.show({
       id: notificationId,
-      title,
-      message,
+      title: 'Downloading',
+      message: book.title,
       loading: true,
       autoClose: false,
       withCloseButton: false,
+      color: 'black',
+      styles: (theme) => ({
+        root: { backgroundColor: theme.colors.beige[4] },
+        title: { fontWeight: 700 },
+      }),
     });
 
     setDownloading((prev) => ({ ...prev, [book.id]: true }));
@@ -89,61 +96,125 @@ function App() {
         attempts++;
         try {
           const statusRes = await axios.get(`${API_BASE}/status/${book.id}`);
-          if (statusRes.data.status === 'downloaded') {
+          const status = statusRes.data.status;
+          console.log(`Polling status for ${book.id}: ${status}`);
+          
+          if (status === 'kindle-sent') {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
-            
             notifications.update({
               id: notificationId,
-              title: sendToKindle ? 'Sent to Kindle' : 'Success',
-              message: sendToKindle 
-                ? `Book downloaded and queued for Kindle delivery` 
-                : `Download complete: ${statusRes.data.path}`,
+              title: 'Success',
+              message: 'Book sent to your Kindle!',
               color: 'green',
               icon: <IconCheck size={18} />,
               loading: false,
               autoClose: 5000,
               withCloseButton: true,
+              styles: (theme) => ({
+                root: { backgroundColor: theme.colors.beige[4] },
+              }),
             });
-          } else if (statusRes.data.status === 'download-failed') {
+          } else if (status === 'kindle-sending') {
+            notifications.update({
+              id: notificationId,
+              title: 'Sending to Kindle',
+              message: book.title,
+              loading: true,
+              styles: (theme) => ({
+                root: { backgroundColor: theme.colors.beige[4] },
+              }),
+            });
+          } else if (status === 'kindle-failed') {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
             notifications.update({
               id: notificationId,
-              title: 'Failed',
-              message: `Failed to process ${book.title}`,
+              title: 'Kindle Sync Failed',
+              message: `Failed to send ${book.title} to Kindle`,
               color: 'red',
               icon: <IconX size={18} />,
               loading: false,
               autoClose: 5000,
               withCloseButton: true,
+              styles: (theme) => ({
+                root: { backgroundColor: theme.colors.beige[4] },
+              }),
+            });
+          } else if (status === 'downloaded') {
+            if (sendToKindle) {
+              notifications.update({
+                id: notificationId,
+                title: 'Sending to Kindle',
+                message: book.title,
+                loading: true,
+                styles: (theme) => ({
+                  root: { backgroundColor: theme.colors.beige[4] },
+                }),
+              });
+            } else {
+              clearInterval(interval);
+              setDownloading((prev) => ({ ...prev, [book.id]: false }));
+              notifications.update({
+                id: notificationId,
+                title: 'Success',
+                message: `Download complete! Saved locally.`,
+                color: 'green',
+                icon: <IconCheck size={18} />,
+                loading: false,
+                autoClose: 5000,
+                withCloseButton: true,
+                styles: (theme) => ({
+                  root: { backgroundColor: theme.colors.beige[4] },
+                }),
+              });
+            }
+          } else if (status === 'download-failed') {
+            clearInterval(interval);
+            setDownloading((prev) => ({ ...prev, [book.id]: false }));
+            notifications.update({
+              id: notificationId,
+              title: 'Download Failed',
+              message: `Failed to download ${book.title}`,
+              color: 'red',
+              icon: <IconX size={18} />,
+              loading: false,
+              autoClose: 5000,
+              withCloseButton: true,
+              styles: (theme) => ({
+                root: { backgroundColor: theme.colors.beige[4] },
+              }),
             });
           }
         } catch (err) {
-          if (attempts > 30) {
+          console.error('Polling error:', err);
+          if (attempts > 60) { // Stop after 2 minutes
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
             notifications.update({
               id: notificationId,
               title: 'Timeout',
-              message: 'Check logs for download status.',
+              message: 'Lost connection to download status.',
               color: 'yellow',
               loading: false,
               autoClose: 5000,
+              withCloseButton: true,
             });
           }
         }
       }, 2000);
     } catch (error) {
+      console.error('Download start error:', error);
       setDownloading((prev) => ({ ...prev, [book.id]: false }));
       notifications.update({
         id: notificationId,
         title: 'Error',
-        message: 'Could not start process',
+        message: 'Could not start process. Is the backend running?',
         color: 'red',
         icon: <IconX size={18} />,
         loading: false,
         autoClose: 5000,
+        withCloseButton: true,
       });
     }
   };
@@ -152,47 +223,58 @@ function App() {
 
   const BookCard = ({ book }) => (
     <Card withBorder shadow="sm" radius="md" padding="md">
-      <Stack gap="xs">
-        <Text fw={700} size="lg" lineClamp={2} style={{ lineHeight: 1.2 }}>
-          {book.title}
-        </Text>
-        
-        <Text size="sm" c="dimmed">
-          {book.authors}{book.publisher ? ` • ${book.publisher}` : ''}
-        </Text>
-        
-        <Group gap="xs">
-          <Badge variant="outline" color="black" size="sm">{book.year}</Badge>
-          <Badge variant="outline" color="black" size="sm">{book.language}</Badge>
-          <Badge variant="outline" color="black" size="sm">{book.size}</Badge>
-        </Group>
+      <Group align="flex-start" wrap="nowrap">
+        {book.cover_url && (
+          <Image
+            src={book.cover_url}
+            w={80}
+            radius="sm"
+            alt={book.title}
+            fallbackSrc="https://placehold.co/80x120?text=No+Cover"
+          />
+        )}
+        <Stack gap="xs" style={{ flex: 1 }}>
+          <Text fw={700} size="lg" lineClamp={2} style={{ lineHeight: 1.2 }}>
+            {book.title}
+          </Text>
+          
+          <Text size="sm" c="dimmed">
+            {book.authors}{book.publisher ? ` • ${book.publisher}` : ''}
+          </Text>
+          
+          <Group gap="xs">
+            <Badge variant="outline" color="black" size="sm">{book.year}</Badge>
+            <Badge variant="outline" color="black" size="sm">{book.language}</Badge>
+            <Badge variant="outline" color="black" size="sm">{book.size}</Badge>
+          </Group>
 
-        <Divider my="xs" />
+          <Divider my="xs" />
 
-        <Group grow gap="xs">
-          <Button
-            variant="filled"
-            size="sm"
-            color="black"
-            leftSection={<IconSend size={16} />}
-            onClick={() => handleDownload(book, true)}
-            disabled={downloading[book.id]}
-          >
-            {downloading[book.id] ? '...' : 'Kindle'}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            color="black"
-            component="a"
-            href={book.detail_url}
-            target="_blank"
-            leftSection={<IconExternalLink size={16} />}
-          >
-            LibGen
-          </Button>
-        </Group>
-      </Stack>
+          <Group grow gap="xs">
+            <Button
+              variant="filled"
+              size="sm"
+              color="black"
+              leftSection={<IconSend size={16} />}
+              onClick={() => handleDownload(book, true)}
+              disabled={downloading[book.id]}
+            >
+              {downloading[book.id] ? '...' : 'Kindle'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              color="black"
+              component="a"
+              href={book.detail_url}
+              target="_blank"
+              leftSection={<IconExternalLink size={16} />}
+            >
+              LibGen
+            </Button>
+          </Group>
+        </Stack>
+      </Group>
     </Card>
   );
 
@@ -244,6 +326,7 @@ function App() {
               <Table highlightOnHover withTableBorder verticalSpacing="sm">
                 <Table.Thead>
                   <Table.Tr>
+                    <Table.Th w={60}></Table.Th>
                     <Table.Th>Title</Table.Th>
                     <Table.Th>Author</Table.Th>
                     <Table.Th>Publisher</Table.Th>
@@ -256,6 +339,16 @@ function App() {
                 <Table.Tbody>
                   {visibleBooks.map((book) => (
                     <Table.Tr key={book.id}>
+                      <Table.Td>
+                        {book.cover_url && (
+                          <Image
+                            src={book.cover_url}
+                            w={40}
+                            radius="xs"
+                            fallbackSrc="https://placehold.co/40x60?text=?"
+                          />
+                        )}
+                      </Table.Td>
                       <Table.Td>
                         <Text fw={500} size="sm" lineClamp={2}>
                           {book.title}

@@ -8,6 +8,7 @@ from typing import List, Optional
 import re
 import urllib3
 import sqlite3
+import time
 from database import init_db, save_download, update_status, get_all_downloads, get_status_db, log_debug
 from mailer import send_to_kindle
 from dotenv import load_dotenv
@@ -48,6 +49,7 @@ class Book(BaseModel):
     extension: str
     mirrors: List[str]
     detail_url: str
+    cover_url: Optional[str] = None
 
 class DownloadRequest(BaseModel):
     id: str
@@ -83,6 +85,7 @@ def search(query: str):
         'res': 100,
         'phrase': 1,
         'column': 'def',
+        'covers': 'on',
         'req': query
     }
     
@@ -100,15 +103,22 @@ def search(query: str):
     
     for row in rows:
         cols = row.find_all('td')
-        if len(cols) < 9:
+        if len(cols) < 10: # Increased as covers shift columns
             continue
             
-        col0 = cols[0]
+        # Cover extraction (New col 0)
+        cover_url = None
+        img = cols[0].find('img')
+        if img and img.get('src'):
+            src = img.get('src')
+            cover_url = f"https://libgen.li{src}" if src.startswith('/') else src
+
+        col1 = cols[1] # Title shifted to col 1
         # Title extraction logic
-        b_tag = col0.find('b')
+        b_tag = col1.find('b')
         title = b_tag.get_text(strip=True) if b_tag else ""
         
-        edition_links = col0.find_all('a', href=re.compile(r'edition\.php'))
+        edition_links = col1.find_all('a', href=re.compile(r'edition\.php'))
         book_id = ""
         
         if not title:
@@ -129,20 +139,20 @@ def search(query: str):
                     break
         
         if not title:
-            title = col0.get_text(strip=True)
+            title = col1.get_text(strip=True)
             
-        authors = cols[1].get_text(strip=True)
-        publisher = cols[2].get_text(strip=True)
-        year = cols[3].get_text(strip=True)
-        language = cols[4].get_text(strip=True)
-        size = cols[6].get_text(strip=True)
-        extension = cols[7].get_text(strip=True).lower()
+        authors = cols[2].get_text(strip=True)
+        publisher = cols[3].get_text(strip=True)
+        year = cols[4].get_text(strip=True)
+        language = cols[5].get_text(strip=True)
+        size = cols[7].get_text(strip=True)
+        extension = cols[8].get_text(strip=True).lower()
         
         if extension != 'epub':
             continue
             
         mirror_links = []
-        mirror_cell = cols[8]
+        mirror_cell = cols[9]
         for a in mirror_cell.find_all('a'):
             href = a.get('href')
             if href:
@@ -170,7 +180,8 @@ def search(query: str):
             size=size,
             extension=extension,
             mirrors=mirror_links[:3],
-            detail_url=edition_link or (mirror_links[0] if mirror_links else f"https://libgen.li/index.php?req={query}")
+            detail_url=edition_link or (mirror_links[0] if mirror_links else f"https://libgen.li/index.php?req={query}"),
+            cover_url=cover_url
         ))
         
     return books
@@ -187,7 +198,8 @@ def perform_download(book_data: dict, auto_email: bool = False):
     try:
         log_debug(f"Starting background download for {download_id}: {title}")
         
-        safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+        # Clean title but keep spaces
+        safe_title = re.sub(r'[^\w\s-]', '', title).strip()
         filename = f"{safe_title}.{extension}"
         filepath = os.path.join(DOWNLOAD_DIR, filename)
         
@@ -251,15 +263,22 @@ def trigger_email(book_id, file_path):
         log_debug("Skipping email: SMTP credentials not set in .env")
         return
 
+    download_status[book_id] = {"status": "kindle-sending", "path": file_path}
+    update_status(book_id, "kindle-sending")
+
     success, msg = send_to_kindle(file_path, smtp_server, smtp_port, smtp_user, smtp_password, kindle_email)
     if success:
         log_debug(f"Email sent for {book_id}")
+        download_status[book_id] = {"status": "kindle-sent", "path": file_path}
+        update_status(book_id, "kindle-sent")
     else:
         log_debug(f"Email failed for {book_id}: {msg}")
+        download_status[book_id] = {"status": "kindle-failed", "path": file_path}
+        update_status(book_id, "kindle-failed")
 
 @app.post("/download")
 def start_download(req: DownloadRequest, background_tasks: BackgroundTasks):
-    book_dict = req.dict()
+    book_dict = req.model_dump()
     log_debug(f"Received download request for {book_dict['id']} (send_to_kindle: {req.send_to_kindle})")
     try:
         save_download(book_dict, "downloading")
