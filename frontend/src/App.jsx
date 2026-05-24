@@ -18,9 +18,16 @@ import {
 } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
-import { IconSearch, IconDownload, IconCheck, IconX, IconExternalLink } from '@tabler/icons-react';
+import {
+  IconSearch,
+  IconCheck,
+  IconX,
+  IconExternalLink,
+  IconSend,
+} from '@tabler/icons-react';
 import axios from 'axios';
 import bannerImg from './assets/book-thief-banner.jpeg';
+import noResultsImg from './assets/book-thief-no-results.jpeg';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -28,6 +35,7 @@ function App() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [books, setBooks] = useState([]);
+  const [hasSearched, setHasSearched] = useState(false);
   const [visibleCount, setVisibleCount] = useState(20);
   const [downloading, setDownloading] = useState({});
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -35,19 +43,13 @@ function App() {
   const handleSearch = async () => {
     if (!query) return;
     setLoading(true);
+    setHasSearched(true);
     setVisibleCount(20);
     try {
       const response = await axios.get(`${API_BASE}/search`, {
         params: { query },
       });
       setBooks(response.data);
-      if (response.data.length === 0) {
-        notifications.show({
-          title: 'No results',
-          message: 'Try a different search term',
-          color: 'yellow',
-        });
-      }
     } catch (error) {
       notifications.show({
         title: 'Error',
@@ -59,11 +61,15 @@ function App() {
     }
   };
 
-  const handleDownload = async (book) => {
+  const handleDownload = async (book, sendToKindle = false) => {
+    const notificationId = sendToKindle ? `kindle-${book.id}` : book.id;
+    const title = sendToKindle ? 'Kindle Sync' : 'Downloading';
+    const message = sendToKindle ? `Starting Kindle sync for ${book.title}` : `Started downloading ${book.title}`;
+
     notifications.show({
-      id: book.id,
-      title: 'Downloading',
-      message: `Started downloading ${book.title}`,
+      id: notificationId,
+      title,
+      message,
       loading: true,
       autoClose: false,
       withCloseButton: false,
@@ -72,17 +78,9 @@ function App() {
     setDownloading((prev) => ({ ...prev, [book.id]: true }));
 
     try {
-      const response = await axios.post(`${API_BASE}/download`, {
-        id: book.id,
-        title: book.title,
-        authors: book.authors,
-        publisher: book.publisher,
-        year: book.year,
-        language: book.language,
-        size: book.size,
-        extension: book.extension,
-        mirrors: book.mirrors,
-        detail_url: book.detail_url,
+      await axios.post(`${API_BASE}/download`, {
+        ...book,
+        send_to_kindle: sendToKindle,
       });
 
       // Poll for status
@@ -94,10 +92,13 @@ function App() {
           if (statusRes.data.status === 'downloaded') {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
+            
             notifications.update({
-              id: book.id,
-              title: 'Success',
-              message: `Download complete: ${statusRes.data.path}`,
+              id: notificationId,
+              title: sendToKindle ? 'Sent to Kindle' : 'Success',
+              message: sendToKindle 
+                ? `Book downloaded and queued for Kindle delivery` 
+                : `Download complete: ${statusRes.data.path}`,
               color: 'green',
               icon: <IconCheck size={18} />,
               loading: false,
@@ -108,9 +109,9 @@ function App() {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
             notifications.update({
-              id: book.id,
+              id: notificationId,
               title: 'Failed',
-              message: `Failed to download ${book.title} from all mirrors`,
+              message: `Failed to process ${book.title}`,
               color: 'red',
               icon: <IconX size={18} />,
               loading: false,
@@ -119,13 +120,13 @@ function App() {
             });
           }
         } catch (err) {
-          if (attempts > 30) { // Stop after 1 minute
+          if (attempts > 30) {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
             notifications.update({
-              id: book.id,
+              id: notificationId,
               title: 'Timeout',
-              message: 'Lost connection to download status. Check Downloads page later.',
+              message: 'Check logs for download status.',
               color: 'yellow',
               loading: false,
               autoClose: 5000,
@@ -136,9 +137,9 @@ function App() {
     } catch (error) {
       setDownloading((prev) => ({ ...prev, [book.id]: false }));
       notifications.update({
-        id: book.id,
+        id: notificationId,
         title: 'Error',
-        message: 'Could not start download',
+        message: 'Could not start process',
         color: 'red',
         icon: <IconX size={18} />,
         loading: false,
@@ -168,16 +169,16 @@ function App() {
 
         <Divider my="xs" />
 
-        <Group grow gap="sm">
+        <Group grow gap="xs">
           <Button
             variant="filled"
             size="sm"
             color="black"
-            leftSection={<IconDownload size={16} />}
-            onClick={() => handleDownload(book)}
+            leftSection={<IconSend size={16} />}
+            onClick={() => handleDownload(book, true)}
             disabled={downloading[book.id]}
           >
-            {downloading[book.id] ? 'Downloading...' : 'Download'}
+            {downloading[book.id] ? '...' : 'Kindle'}
           </Button>
           <Button
             variant="outline"
@@ -188,7 +189,7 @@ function App() {
             target="_blank"
             leftSection={<IconExternalLink size={16} />}
           >
-            More
+            LibGen
           </Button>
         </Group>
       </Stack>
@@ -266,29 +267,28 @@ function App() {
                       <Table.Td size="sm">{book.language}</Table.Td>
                       <Table.Td size="sm">{book.size}</Table.Td>
                       <Table.Td>
-                        <Group gap="xs" wrap="nowrap">
-                          <Button
-                            variant="filled"
-                            size="xs"
-                            color="black"
-                            leftSection={<IconDownload size={14} />}
-                            onClick={() => handleDownload(book)}
-                            disabled={downloading[book.id]}
-                          >
-                            {downloading[book.id] ? '...' : 'Download'}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="xs"
-                            color="black"
-                            component="a"
-                            href={book.detail_url}
-                            target="_blank"
-                            leftSection={<IconExternalLink size={14} />}
-                          >
-                            More
-                          </Button>
-                        </Group>
+                      <Group gap="xs" wrap="nowrap">
+                        <ActionIcon
+                          variant="filled"
+                          color="black"
+                          onClick={() => handleDownload(book, true)}
+                          disabled={downloading[book.id]}
+                          title="Kindle"
+                        >
+                          <IconSend size={16} />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="outline"
+                          color="black"
+                          component="a"
+                          href={book.detail_url}
+                          target="_blank"
+                          title="LibGen"
+                        >
+                          <IconExternalLink size={16} />
+                        </ActionIcon>
+                      </Group>
+
                       </Table.Td>
                     </Table.Tr>
                   ))}
@@ -309,6 +309,21 @@ function App() {
             </Center>
           )}
         </Stack>
+      )}
+
+      {hasSearched && !loading && books.length === 0 && (
+        <Center mt="xl">
+          <Stack align="center" gap="sm">
+            <Text fw={700} size="xl" c="black">No results found</Text>
+            <Image 
+              src={noResultsImg} 
+              w={{ base: 250, sm: 400 }} 
+              radius="md"
+              alt="No Results"
+              fallbackSrc="https://placehold.co/400x300?text=No+Results"
+            />
+          </Stack>
+        </Center>
       )}
       
       {loading && books.length === 0 && (

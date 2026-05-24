@@ -7,6 +7,9 @@ backend/venv/
 backend/env/
 backend/.env
 backend/downloads.db
+backend/debug.log
+backend/server.log
+.env.*
 
 # Frontend
 frontend/node_modules/

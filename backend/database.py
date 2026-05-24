@@ -5,6 +5,7 @@ import json
 DB_PATH = os.path.join(os.path.dirname(__file__), "downloads.db")
 
 def init_db():
+    log_debug("Initializing database")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -28,6 +29,7 @@ def init_db():
     conn.close()
 
 def save_download(book_data, status="pending", file_path=None):
+    log_debug(f"Saving book {book_data['id']} to DB with status {status}")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -38,6 +40,7 @@ def save_download(book_data, status="pending", file_path=None):
     mirrors_str = json.dumps(book_data.get('mirrors', []))
     
     if exists:
+        log_debug(f"Book {book_data['id']} exists, updating")
         cursor.execute("""
             UPDATE downloads SET 
                 status = ?, 
@@ -46,6 +49,7 @@ def save_download(book_data, status="pending", file_path=None):
             WHERE id = ?
         """, (status, file_path, book_data['id']))
     else:
+        log_debug(f"Book {book_data['id']} is new, inserting")
         cursor.execute("""
             INSERT INTO downloads (
                 id, title, authors, publisher, year, language, 
@@ -70,6 +74,7 @@ def save_download(book_data, status="pending", file_path=None):
     conn.close()
 
 def update_status(book_id, status, file_path=None):
+    log_debug(f"Updating status for {book_id} to {status}")
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     if file_path:

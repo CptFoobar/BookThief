@@ -9,6 +9,11 @@ import re
 import urllib3
 import sqlite3
 from database import init_db, save_download, update_status, get_all_downloads, get_status_db, log_debug
+from mailer import send_to_kindle
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Disable insecure request warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -55,6 +60,7 @@ class DownloadRequest(BaseModel):
     extension: str
     mirrors: List[str]
     detail_url: str
+    send_to_kindle: bool = False
 
 LIBGEN_URL = "https://libgen.li/index.php"
 HEADERS = {
@@ -172,70 +178,105 @@ def search(query: str):
 # Progress tracking
 download_status = {}
 
-def perform_download(book_data: dict):
+def perform_download(book_data: dict, auto_email: bool = False):
     download_id = book_data['id']
     title = book_data['title']
     extension = book_data['extension']
     mirrors = book_data['mirrors']
     
-    log_debug(f"Starting background download for {download_id}: {title}")
-    
-    safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
-    filename = f"{safe_title}.{extension}"
-    filepath = os.path.join(DOWNLOAD_DIR, filename)
-    
-    download_status[download_id] = {"status": "downloading", "path": None}
-    update_status(download_id, "downloading")
-    
-    for mirror in mirrors:
-        for attempt in range(2):
-            try:
-                log_debug(f"Attempting {mirror} (attempt {attempt+1})")
-                target_url = mirror
-                
-                if "ads.php" in mirror or "libgen.li/ads.php" in mirror:
-                    res = requests.get(mirror, headers=HEADERS, verify=False, timeout=15)
-                    if res.status_code == 200:
-                        s = BeautifulSoup(res.text, 'html.parser')
-                        get_link = s.find('a', string=re.compile(r'GET', re.I))
-                        if get_link and get_link.get('href'):
-                            target_url = get_link.get('href')
-                            if not target_url.startswith('http'):
-                                target_url = f"https://libgen.li/{target_url}"
-                
-                log_debug(f"Downloading from {target_url}")
-                file_res = requests.get(target_url, headers=HEADERS, verify=False, stream=True, timeout=30)
-                if file_res.status_code == 200:
-                    with open(filepath, 'wb') as f:
-                        for chunk in file_res.iter_content(chunk_size=8192):
-                            f.write(chunk)
+    try:
+        log_debug(f"Starting background download for {download_id}: {title}")
+        
+        safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+        filename = f"{safe_title}.{extension}"
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        
+        download_status[download_id] = {"status": "downloading", "path": None}
+        update_status(download_id, "downloading")
+        
+        for mirror in mirrors:
+            for attempt in range(2):
+                try:
+                    log_debug(f"Attempting {mirror} (attempt {attempt+1})")
+                    target_url = mirror
                     
-                    log_debug(f"Download completed for {download_id}")
-                    download_status[download_id] = {"status": "downloaded", "path": filepath}
-                    update_status(download_id, "downloaded", filepath)
-                    return
-                else:
-                    log_debug(f"Failed with status {file_res.status_code}")
-            except Exception as e:
-                log_debug(f"Error during attempt: {str(e)}")
-                continue
-                
-    log_debug(f"All mirrors failed for {download_id}")
-    download_status[download_id] = {"status": "download-failed", "path": None}
-    update_status(download_id, "download-failed")
+                    if "ads.php" in mirror or "libgen.li/ads.php" in mirror:
+                        res = requests.get(mirror, headers=HEADERS, verify=False, timeout=15)
+                        if res.status_code == 200:
+                            s = BeautifulSoup(res.text, 'html.parser')
+                            get_link = s.find('a', string=re.compile(r'GET', re.I))
+                            if get_link and get_link.get('href'):
+                                target_url = get_link.get('href')
+                                if not target_url.startswith('http'):
+                                    if target_url.startswith('/'):
+                                        target_url = f"https://libgen.li{target_url}"
+                                    else:
+                                        target_url = f"https://libgen.li/{target_url}"
+                    
+                    log_debug(f"Downloading from {target_url}")
+                    file_res = requests.get(target_url, headers=HEADERS, verify=False, stream=True, timeout=30)
+                    if file_res.status_code == 200:
+                        with open(filepath, 'wb') as f:
+                            for chunk in file_res.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        
+                        log_debug(f"Download completed for {download_id}")
+                        download_status[download_id] = {"status": "downloaded", "path": filepath}
+                        update_status(download_id, "downloaded", filepath)
+                        
+                        if auto_email:
+                            trigger_email(download_id, filepath)
+                        return
+                    else:
+                        log_debug(f"Failed with status {file_res.status_code}")
+                except Exception as e:
+                    log_debug(f"Error during attempt: {str(e)}")
+                    continue
+                    
+        log_debug(f"All mirrors failed for {download_id}")
+        download_status[download_id] = {"status": "download-failed", "path": None}
+        update_status(download_id, "download-failed")
+    except Exception as e:
+        log_debug(f"CRITICAL ERROR in perform_download: {str(e)}")
+        download_status[download_id] = {"status": "download-failed", "path": None}
+
+def trigger_email(book_id, file_path):
+    smtp_server = os.getenv("SMTP_SERVER")
+    smtp_port = os.getenv("SMTP_PORT")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    kindle_email = os.getenv("KINDLE_EMAIL")
+
+    if not all([smtp_server, smtp_port, smtp_user, smtp_password, kindle_email]):
+        log_debug("Skipping email: SMTP credentials not set in .env")
+        return
+
+    success, msg = send_to_kindle(file_path, smtp_server, smtp_port, smtp_user, smtp_password, kindle_email)
+    if success:
+        log_debug(f"Email sent for {book_id}")
+    else:
+        log_debug(f"Email failed for {book_id}: {msg}")
 
 @app.post("/download")
 def start_download(req: DownloadRequest, background_tasks: BackgroundTasks):
     book_dict = req.dict()
-    log_debug(f"Received download request for {book_dict['id']}")
+    log_debug(f"Received download request for {book_dict['id']} (send_to_kindle: {req.send_to_kindle})")
     try:
         save_download(book_dict, "downloading")
-        log_debug(f"Saved to DB: {book_dict['id']}")
     except Exception as e:
         log_debug(f"Error saving to DB: {str(e)}")
         
-    background_tasks.add_task(perform_download, book_dict)
+    background_tasks.add_task(perform_download, book_dict, auto_email=req.send_to_kindle)
     return {"message": "Download started", "id": req.id}
+
+@app.post("/email/{book_id}")
+def email_existing_book(book_id: str, background_tasks: BackgroundTasks):
+    res = get_status_db(book_id)
+    if not res or res["status"] != "downloaded" or not res["file_path"]:
+        raise HTTPException(status_code=400, detail="Book not downloaded or not found")
+    
+    background_tasks.add_task(trigger_email, book_id, res["file_path"])
+    return {"message": "Emailing started"}
 
 @app.get("/status/{download_id}")
 def get_status(download_id: str):
