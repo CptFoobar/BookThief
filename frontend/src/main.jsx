@@ -20,6 +20,16 @@ const theme = createTheme({
         color: 'black',
       },
     },
+    Notification: {
+      styles: (theme) => ({
+        root: {
+          backgroundColor: theme.colors.beige[4],
+          border: `1px solid rgba(0,0,0,0.15)`,
+          borderRadius: theme.radius.md,
+        },
+        title: { fontWeight: 700 },
+      }),
+    },
   },
 });
 

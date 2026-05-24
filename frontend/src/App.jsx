@@ -13,6 +13,9 @@ import {
   IconCheck,
   IconX,
   IconHistory,
+  IconDownload,
+  IconSend,
+  IconClock,
 } from '@tabler/icons-react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -21,7 +24,7 @@ import { SearchPage } from './pages/SearchPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { SidebarLink } from './components/SidebarLink';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = `http://${window.location.hostname}:8000`;
 
 function App() {
   const [query, setQuery] = useState('');
@@ -36,6 +39,7 @@ function App() {
 
   const handleSearch = async () => {
     if (!query) return;
+    setBooks([]);
     setLoading(true);
     setHasSearched(true);
     setVisibleCount(20);
@@ -55,8 +59,27 @@ function App() {
     }
   };
 
+  const getStatusConfig = (status) => {
+    switch (status) {
+      case 'downloading':
+        return { color: 'blue', icon: <IconDownload size={18} /> };
+      case 'kindle-sending':
+        return { color: 'blue', icon: <IconSend size={18} /> };
+      case 'downloaded':
+        return { color: 'teal', icon: <IconCheck size={18} /> };
+      case 'kindle-sent':
+        return { color: 'green', icon: <IconCheck size={18} /> };
+      case 'download-failed':
+      case 'kindle-failed':
+        return { color: 'red', icon: <IconX size={18} /> };
+      default:
+        return { color: 'gray', icon: <IconClock size={18} /> };
+    }
+  };
+
   const handleDownload = async (book, sendToKindle = false) => {
     const notificationId = `dl-${book.id}-${Date.now()}`;
+    const initialConfig = getStatusConfig('downloading');
     
     notifications.show({
       id: notificationId,
@@ -65,11 +88,8 @@ function App() {
       loading: true,
       autoClose: false,
       withCloseButton: false,
-      color: 'black',
-      styles: (theme) => ({
-        root: { backgroundColor: theme.colors.beige[4] },
-        title: { fontWeight: 700 },
-      }),
+      color: initialConfig.color,
+      icon: initialConfig.icon,
     });
 
     setDownloading((prev) => ({ ...prev, [book.id]: true }));
@@ -86,6 +106,7 @@ function App() {
         try {
           const statusRes = await axios.get(`${API_BASE}/status/${book.id}`);
           const status = statusRes.data.status;
+          const config = getStatusConfig(status);
           
           if (status === 'kindle-sent') {
             clearInterval(interval);
@@ -94,14 +115,11 @@ function App() {
               id: notificationId,
               title: 'Success',
               message: 'Book sent to your Kindle!',
-              color: 'green',
-              icon: <IconCheck size={18} />,
+              color: config.color,
+              icon: config.icon,
               loading: false,
               autoClose: 5000,
               withCloseButton: true,
-              styles: (theme) => ({
-                root: { backgroundColor: theme.colors.beige[4] },
-              }),
             });
           } else if (status === 'kindle-sending') {
             notifications.update({
@@ -109,9 +127,8 @@ function App() {
               title: 'Sending to Kindle',
               message: book.title,
               loading: true,
-              styles: (theme) => ({
-                root: { backgroundColor: theme.colors.beige[4] },
-              }),
+              color: config.color,
+              icon: config.icon,
             });
           } else if (status === 'kindle-failed') {
             clearInterval(interval);
@@ -120,14 +137,11 @@ function App() {
               id: notificationId,
               title: 'Kindle Sync Failed',
               message: `Failed to send ${book.title} to Kindle`,
-              color: 'red',
-              icon: <IconX size={18} />,
+              color: config.color,
+              icon: config.icon,
               loading: false,
               autoClose: 5000,
               withCloseButton: true,
-              styles: (theme) => ({
-                root: { backgroundColor: theme.colors.beige[4] },
-              }),
             });
           } else if (status === 'downloaded') {
             if (sendToKindle) {
@@ -136,9 +150,8 @@ function App() {
                 title: 'Sending to Kindle',
                 message: book.title,
                 loading: true,
-                styles: (theme) => ({
-                  root: { backgroundColor: theme.colors.beige[4] },
-                }),
+                color: 'blue',
+                icon: <IconSend size={18} />,
               });
             } else {
               clearInterval(interval);
@@ -147,14 +160,11 @@ function App() {
                 id: notificationId,
                 title: 'Success',
                 message: `Download complete! Saved locally.`,
-                color: 'green',
-                icon: <IconCheck size={18} />,
+                color: config.color,
+                icon: config.icon,
                 loading: false,
                 autoClose: 5000,
                 withCloseButton: true,
-                styles: (theme) => ({
-                  root: { backgroundColor: theme.colors.beige[4] },
-                }),
               });
             }
           } else if (status === 'download-failed') {
@@ -164,14 +174,11 @@ function App() {
               id: notificationId,
               title: 'Download Failed',
               message: `Failed to download ${book.title}`,
-              color: 'red',
-              icon: <IconX size={18} />,
+              color: config.color,
+              icon: config.icon,
               loading: false,
               autoClose: 5000,
               withCloseButton: true,
-              styles: (theme) => ({
-                root: { backgroundColor: theme.colors.beige[4] },
-              }),
             });
           }
         } catch (err) {

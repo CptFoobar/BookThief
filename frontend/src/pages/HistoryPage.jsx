@@ -15,9 +15,9 @@ import {
 import { notifications } from '@mantine/notifications';
 import axios from 'axios';
 import { DateTime } from 'luxon';
-import bannerImg from '../assets/book-thief-banner.jpeg';
+import lootImg from '../assets/book-thief-loot.jpeg';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = `http://${window.location.hostname}:8000`;
 
 export function HistoryPage({ isMobile }) {
   const [history, setHistory] = useState([]);
@@ -91,15 +91,14 @@ export function HistoryPage({ isMobile }) {
 
   return (
     <Container size="lg" py="xl">
-      <Stack align="center" gap="md">
+      <Stack align="center" gap="xl">
         <Image 
-          src={bannerImg} 
+          src={lootImg} 
           className="torn-paper" 
-          w={{ base: 200, sm: 300 }} 
-          alt="Book Thief Banner"
-          fallbackSrc="https://placehold.co/300x150?text=Book+Thief"
+          alt="Book Thief Loot"
+          fallbackSrc="https://placehold.co/300x150?text=History+Loot"
         />
-        <Title order={1} style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', fontWeight: 900, color: '#000', marginTop: -20 }}>
+        <Title order={1} style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', fontWeight: 900, color: '#000', marginTop: -20 }} pt="lg">
           History
         </Title>
       </Stack>

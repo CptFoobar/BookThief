@@ -14,6 +14,7 @@ import {
   Image,
   Card,
   Divider,
+  rem,
 } from '@mantine/core';
 import {
   IconSearch,
@@ -40,72 +41,74 @@ export function SearchPage({
 
   const BookCard = ({ book }) => (
     <Card withBorder shadow="sm" radius="md" padding="md">
-      <Group align="flex-start" wrap="nowrap">
-        {book.cover_url && (
-          <Image
-            src={book.cover_url}
-            w={80}
-            radius="sm"
-            alt={book.title}
-            fallbackSrc="https://placehold.co/80x120?text=No+Cover"
-          />
-        )}
-        <Stack gap="xs" style={{ flex: 1 }}>
-          <Text fw={700} size="lg" lineClamp={2} style={{ lineHeight: 1.2 }}>
-            {book.title}
-          </Text>
-          
-          <Text size="sm" c="dimmed">
-            {book.authors}{book.publisher ? ` • ${book.publisher}` : ''}
-          </Text>
-          
-          <Group gap="xs">
-            <Badge variant="outline" color="black" size="sm">{book.year}</Badge>
-            <Badge variant="outline" color="black" size="sm">{book.language}</Badge>
-            <Badge variant="outline" color="black" size="sm">{book.size}</Badge>
-          </Group>
+      <Stack gap="xs" style={{ flex: 1 }}>
+        <Group align="flex-start" wrap="nowrap">
+          {book.cover_url && (
+            <Image
+              src={book.cover_url}
+              w={"auto"}
+              
+              radius="sm"
+              alt={book.title}
+              fallbackSrc="https://placehold.co/80x120?text=No+Cover"
+            />
+          )}
+          <Stack>
+            <Text fw={700} size="xl" lineClamp={2} style={{ lineHeight: 1.2 }}>
+              {book.title}
+            </Text>
 
-          <Divider my="xs" />
+            <Text size="md" c="dimmed">
+              {book.authors}{book.publisher ? ` • ${book.publisher}` : ''}
+            </Text>
 
-          <Group grow gap="xs">
-            <Button
-              variant="filled"
-              size="sm"
-              color="black"
-              leftSection={<IconSend size={16} />}
-              onClick={() => handleDownload(book, true)}
-              disabled={downloading[book.id]}
-            >
-              {downloading[book.id] ? '...' : 'Kindle'}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              color="black"
-              component="a"
-              href={book.detail_url}
-              target="_blank"
-              leftSection={<IconExternalLink size={16} />}
-            >
-              LibGen
-            </Button>
-          </Group>
-        </Stack>
-      </Group>
+            <Group gap="xs">
+              <Badge variant="outline" color="black" size="md">{book.year}</Badge>
+              <Badge variant="outline" color="black" size="md">{book.language}</Badge>
+              <Badge variant="outline" color="black" size="md">{book.size}</Badge>
+            </Group>
+          </Stack>
+        </Group>
+        <Divider my="xs" />
+
+        <Group grow gap="xs">
+          <Button
+            variant="filled"
+            size="sm"
+            color="black"
+            leftSection={<IconSend size={16} />}
+            onClick={() => handleDownload(book, true)}
+            disabled={downloading[book.id]}
+          >
+            {downloading[book.id] ? '...' : 'Kindle'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            color="black"
+            component="a"
+            href={book.detail_url}
+            target="_blank"
+            leftSection={<IconExternalLink size={16} />}
+          >
+            LibGen
+          </Button>
+        </Group>
+      </Stack>
     </Card>
   );
 
   return (
     <Container size="lg" py="xl">
       <Stack align="center" gap="md" mt={books.length > 0 ? 0 : 40} style={{ transition: 'all 0.5s ease' }}>
-        <Image 
-          src={bannerImg} 
-          className="torn-paper" 
-          w={{ base: 200, sm: 300 }} 
+        <Image
+          src={bannerImg}
+          className="torn-paper"
+          w={{ base: 300, sm: 500 }}
           alt="Book Thief Banner"
           fallbackSrc="https://placehold.co/300x150?text=Book+Thief"
         />
-        <Title order={1} style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', fontWeight: 900, color: '#000', marginTop: -20 }}>
+        <Title order={1} style={{ fontSize: 'clamp(2rem, 8vw, 3rem)', fontWeight: 900, color: '#000', marginTop: -20 }} pt="lg">
           Book<span style={{ color: '#F5F5DC', WebkitTextStroke: '1px black' }}>Thief</span>
         </Title>
         <Group style={{ width: '100%', maxWidth: 600 }} wrap={isMobile ? "wrap" : "nowrap"}>
@@ -118,10 +121,10 @@ export function SearchPage({
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             leftSection={<IconSearch size={18} />}
           />
-          <Button 
-            size="md" 
-            onClick={handleSearch} 
-            loading={loading} 
+          <Button
+            size="md"
+            onClick={handleSearch}
+            loading={loading}
             color="black"
             fullWidth={isMobile}
           >
@@ -205,12 +208,12 @@ export function SearchPage({
               </Table>
             </Table.ScrollContainer>
           )}
-          
+
           {visibleCount < books.length && (
             <Center py="md">
-              <Button 
-                variant="subtle" 
-                color="black" 
+              <Button
+                variant="subtle"
+                color="black"
                 onClick={() => setVisibleCount(prev => prev + 20)}
               >
                 Show More ({books.length - visibleCount} remaining)
@@ -224,20 +227,13 @@ export function SearchPage({
         <Center mt="xl">
           <Stack align="center" gap="sm">
             <Text fw={700} size="xl" c="black">No results found</Text>
-            <Image 
-              src={noResultsImg} 
-              w={{ base: 250, sm: 400 }} 
+            <Image
+              src={noResultsImg}
               radius="md"
               alt="No Results"
               fallbackSrc="https://placehold.co/400x300?text=No+Results"
             />
           </Stack>
-        </Center>
-      )}
-      
-      {loading && books.length === 0 && (
-        <Center mt="xl">
-          <Loader color="beige" />
         </Center>
       )}
     </Container>
