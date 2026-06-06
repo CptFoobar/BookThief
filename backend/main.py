@@ -9,6 +9,7 @@ import re
 import urllib3
 import sqlite3
 import time
+from urllib.parse import quote
 from database import init_db, save_download, update_status, get_all_downloads, get_status_db, log_debug
 from mailer import send_to_kindle
 from dotenv import load_dotenv
@@ -49,6 +50,7 @@ class Book(BaseModel):
     extension: str
     mirrors: List[str]
     detail_url: str
+    isbns: List[str] = []
     cover_url: Optional[str] = None
 
 class DownloadRequest(BaseModel):
@@ -64,7 +66,8 @@ class DownloadRequest(BaseModel):
     detail_url: str
     send_to_kindle: bool = False
 
-LIBGEN_URL = "https://libgen.li/index.php"
+LIBGEN_DOMAIN = os.getenv("LIBGEN_DOMAIN", "https://libgen.li").rstrip("/")
+LIBGEN_URL = f"{LIBGEN_DOMAIN}/index.php"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -111,7 +114,7 @@ def search(query: str):
         img = cols[0].find('img')
         if img and img.get('src'):
             src = img.get('src')
-            cover_url = f"https://libgen.li{src}" if src.startswith('/') else src
+            cover_url = f"{LIBGEN_DOMAIN}{src}" if src.startswith('/') else src
 
         col1 = cols[1] # Title shifted to col 1
         # Title extraction logic
@@ -148,6 +151,14 @@ def search(query: str):
         size = cols[7].get_text(strip=True)
         extension = cols[8].get_text(strip=True).lower()
         
+        # Extract ISBNs from col 1 (it's in green text)
+        isbns = []
+        isbn_font = col1.find('font', color='green')
+        if isbn_font:
+            isbn_text = isbn_font.get_text(strip=True)
+            # Use regex to find 10-13 digit sequences
+            isbns = re.findall(r'\d{10,13}', isbn_text)
+
         if extension != 'epub':
             continue
             
@@ -158,9 +169,9 @@ def search(query: str):
             if href:
                 if not href.startswith('http'):
                     if href.startswith('/'):
-                        href = f"https://libgen.li{href}"
+                        href = f"{LIBGEN_DOMAIN}{href}"
                     else:
-                        href = f"https://libgen.li/{href}"
+                        href = f"{LIBGEN_DOMAIN}/{href}"
                 mirror_links.append(href)
         
         # Extract detail page URL (edition.php)
@@ -168,7 +179,7 @@ def search(query: str):
         if edition_links:
             href = edition_links[0].get('href')
             if href:
-                edition_link = f"https://libgen.li/{href}" if not href.startswith('http') else href
+                edition_link = f"{LIBGEN_DOMAIN}/{href}" if not href.startswith('http') else href
 
         books.append(Book(
             id=book_id or f"gen-{len(books)}",
@@ -180,7 +191,8 @@ def search(query: str):
             size=size,
             extension=extension,
             mirrors=mirror_links[:3],
-            detail_url=edition_link or (mirror_links[0] if mirror_links else f"https://libgen.li/index.php?req={query}"),
+            detail_url=edition_link or (mirror_links[0] if mirror_links else f"{LIBGEN_URL}?req={quote(query)}"),
+            isbns=isbns,
             cover_url=cover_url
         ))
         
@@ -212,7 +224,7 @@ def perform_download(book_data: dict, auto_email: bool = False):
                     log_debug(f"Attempting {mirror} (attempt {attempt+1})")
                     target_url = mirror
                     
-                    if "ads.php" in mirror or "libgen.li/ads.php" in mirror:
+                    if "ads.php" in mirror or f"{LIBGEN_DOMAIN}/ads.php" in mirror.replace("https://libgen.li", LIBGEN_DOMAIN):
                         res = requests.get(mirror, headers=HEADERS, verify=False, timeout=15)
                         if res.status_code == 200:
                             s = BeautifulSoup(res.text, 'html.parser')
@@ -221,9 +233,9 @@ def perform_download(book_data: dict, auto_email: bool = False):
                                 target_url = get_link.get('href')
                                 if not target_url.startswith('http'):
                                     if target_url.startswith('/'):
-                                        target_url = f"https://libgen.li{target_url}"
+                                        target_url = f"{LIBGEN_DOMAIN}{target_url}"
                                     else:
-                                        target_url = f"https://libgen.li/{target_url}"
+                                        target_url = f"{LIBGEN_DOMAIN}/{target_url}"
                     
                     log_debug(f"Downloading from {target_url}")
                     file_res = requests.get(target_url, headers=HEADERS, verify=False, stream=True, timeout=30)
@@ -315,9 +327,10 @@ def get_status(download_id: str):
     raise HTTPException(status_code=404, detail="Download not found")
 
 @app.get("/downloads")
-def list_downloads():
-    return get_all_downloads()
+def list_downloads(page: int = 1, limit: int = 20):
+    offset = (page - 1) * limit
+    return get_all_downloads(limit=limit, offset=offset)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

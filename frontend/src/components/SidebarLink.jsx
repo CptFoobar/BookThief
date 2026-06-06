@@ -6,7 +6,7 @@ export const SidebarLink = ({ to, label, icon: Icon, active, onClick }) => (
     component={Link}
     to={to}
     label={label}
-    leftSection={<Icon size={20} />}
+    leftSection={<Icon size={24} />}
     active={active}
     onClick={onClick}
     color="black"
@@ -20,12 +20,12 @@ export const SidebarLink = ({ to, label, icon: Icon, active, onClick }) => (
           color: theme.white,
           transform: 'translateX(4px)',
         },
-        '&[data-active]': {
+        '&[dataActive]': {
           backgroundColor: theme.black,
           color: theme.white,
         },
       },
-      label: { fontWeight: 600 },
+      label: { fontWeight: 600, fontSize: 'var(--mantine-font-size-xl)' },
     })}
   />
 );

@@ -20,6 +20,8 @@ import {
   IconSearch,
   IconExternalLink,
   IconSend,
+  IconBrandGoogle,
+  IconBook,
 } from '@tabler/icons-react';
 import bannerImg from '../assets/book-thief-banner.jpeg';
 import noResultsImg from '../assets/book-thief-no-results.jpeg';
@@ -71,16 +73,45 @@ export function SearchPage({
         </Group>
         <Divider my="xs" />
 
-        <Group grow gap="xs">
+        <Group grow={!isMobile} gap="xs" wrap={isMobile ? "wrap" : "nowrap"}>
           <Button
             variant="filled"
             size="sm"
             color="black"
+            bg="lime.8"
             leftSection={<IconSend size={16} />}
             onClick={() => handleDownload(book, true)}
             disabled={downloading[book.id]}
+            style={isMobile ? { flex: '1 1 45%' } : {}}
           >
             {downloading[book.id] ? '...' : 'Kindle'}
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            color="white"
+            bg="#4285F4"
+            component="a"
+            href={`https://www.google.com/search?q=${encodeURIComponent(`${book.title} ${book.authors}`)}`}
+            target="_blank"
+            leftSection={<IconBrandGoogle size={16} />}
+            style={isMobile ? { flex: '1 1 45%' } : {}}
+          >
+            Google
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            color="black"
+            bg="#e9e5cd"
+            component="a"
+            href={`https://www.goodreads.com/search?utf8=%E2%9C%93&q=${encodeURIComponent((book.isbns && book.isbns.length > 0) ? book.isbns[0] : book.title)}&search_type=books`}
+            target="_blank"
+            leftSection={<IconBook size={16} />}
+            style={isMobile ? { flex: '1 1 45%' } : {}}
+          >
+            Goodreads
           </Button>
           <Button
             variant="outline"
@@ -90,6 +121,7 @@ export function SearchPage({
             href={book.detail_url}
             target="_blank"
             leftSection={<IconExternalLink size={16} />}
+            style={isMobile ? { flex: '1 1 45%' } : {}}
           >
             LibGen
           </Button>
@@ -199,6 +231,26 @@ export function SearchPage({
                             title="LibGen"
                           >
                             <IconExternalLink size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="outline"
+                            color="black"
+                            component="a"
+                            href={`https://www.google.com/search?q=${encodeURIComponent(`${book.title} ${book.authors}`)}`}
+                            target="_blank"
+                            title="Google"
+                          >
+                            <IconBrandGoogle size={16} />
+                          </ActionIcon>
+                          <ActionIcon
+                            variant="outline"
+                            color="black"
+                            component="a"
+                            href={`https://www.goodreads.com/search?utf8=%E2%9C%93&q=${encodeURIComponent((book.isbns && book.isbns.length > 0) ? book.isbns[0] : book.title)}&search_type=books`}
+                            target="_blank"
+                            title="Goodreads"
+                          >
+                            <IconBook size={16} />
                           </ActionIcon>
                         </Group>
                       </Table.Td>

@@ -25,6 +25,8 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_downloads_timestamp ON downloads(timestamp)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status)")
     conn.commit()
     conn.close()
 
@@ -93,14 +95,33 @@ def get_status_db(book_id):
     conn.close()
     return dict(row) if row else None
 
-def get_all_downloads():
+def get_all_downloads(limit: int = 1000, offset: int = 0):
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM downloads ORDER BY timestamp DESC")
+    
+    # Get total count
+    cursor.execute("SELECT COUNT(*) FROM downloads")
+    total_count = cursor.fetchone()[0]
+    
+    # Get status stats
+    cursor.execute("SELECT status, COUNT(*) FROM downloads GROUP BY status")
+    stats_rows = cursor.fetchall()
+    stats = {row[0]: row[1] for row in stats_rows}
+    
+    # Get paginated results
+    cursor.execute("SELECT * FROM downloads ORDER BY timestamp DESC LIMIT ? OFFSET ?", (limit, offset))
     rows = cursor.fetchall()
     conn.close()
-    return [dict(row) for row in rows]
+    
+    return {
+        "items": [dict(row) for row in rows],
+        "total": total_count,
+        "stats": {
+            "sent_to_kindle": stats.get("kindle-sent", 0),
+            "downloading": stats.get("downloading", 0) + stats.get("kindle-sending", 0)
+        }
+    }
 
 def log_debug(message):
     with open(os.path.join(os.path.dirname(__file__), "debug.log"), "a") as f:
