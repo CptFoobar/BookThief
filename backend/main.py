@@ -10,7 +10,7 @@ import urllib3
 import sqlite3
 import time
 from urllib.parse import quote
-from database import init_db, save_download, update_status, get_all_downloads, get_status_db, log_debug
+from database import init_db, save_download, update_status, get_all_downloads, get_status_db, toggle_finished, log_debug
 from mailer import send_to_kindle
 from dotenv import load_dotenv
 
@@ -65,6 +65,9 @@ class DownloadRequest(BaseModel):
     mirrors: List[str]
     detail_url: str
     send_to_kindle: bool = False
+
+class FinishedRequest(BaseModel):
+    finished: bool
 
 LIBGEN_DOMAIN = os.getenv("LIBGEN_DOMAIN", "https://libgen.li").rstrip("/")
 LIBGEN_URL = f"{LIBGEN_DOMAIN}/index.php"
@@ -309,6 +312,16 @@ def email_existing_book(book_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(trigger_email, book_id, res["file_path"])
     return {"message": "Emailing started"}
 
+@app.post("/finished/{book_id}")
+def mark_as_finished(book_id: str, req: FinishedRequest):
+    try:
+        toggle_finished(book_id, req.finished)
+        return {"message": "Status updated"}
+    except Exception as e:
+        safe_id = str(book_id).replace('\n', '').replace('\r', '')
+        log_debug(f"Error updating finished status for {safe_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 @app.get("/status/{download_id}")
 def get_status(download_id: str):
     # Check in-memory first for real-time
@@ -320,9 +333,14 @@ def get_status(download_id: str):
     try:
         res = get_status_db(download_id)
         if res:
-            return {"status": res["status"], "path": res["file_path"]}
+            return {
+                "status": res["status"], 
+                "path": res["file_path"], 
+                "finished": bool(res.get("finished", 0))
+            }
     except Exception as e:
-        log_debug(f"Error getting status from DB: {str(e)}")
+        safe_id = str(download_id).replace('\n', '').replace('\r', '')
+        log_debug(f"Error getting status from DB for {safe_id}: {str(e)}")
         
     raise HTTPException(status_code=404, detail="Download not found")
 

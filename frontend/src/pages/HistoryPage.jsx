@@ -12,8 +12,11 @@ import {
   Image,
   Card,
   Pagination,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import { IconCheck, IconBook } from '@tabler/icons-react';
 import axios from 'axios';
 import { DateTime } from 'luxon';
 import lootImg from '../assets/book-thief-loot.jpeg';
@@ -23,15 +26,16 @@ const API_BASE = `http://${window.location.hostname}:8000`;
 export function HistoryPage({ isMobile }) {
   const [history, setHistory] = useState([]);
   const [totalItems, setTotalItems] = useState(0);
-  const [stats, setStats] = useState({ sent_to_kindle: 0, downloading: 0 });
+  const [stats, setStats] = useState({ sent_to_kindle: 0, downloading: 0, read: 0 });
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
+  const [togglingIds, setTogglingIds] = useState(new Set());
   const itemsPerPage = 10;
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
   useEffect(() => {
-
+    let active = true;
     const fetchHistory = async () => {
       setLoading(true);
       try {
@@ -39,6 +43,8 @@ export function HistoryPage({ isMobile }) {
           params: { page: activePage, limit: itemsPerPage }
         });
         
+        if (!active) return;
+
         const data = response.data;
         if (Array.isArray(data)) {
           // Fallback for old API format
@@ -52,17 +58,47 @@ export function HistoryPage({ isMobile }) {
           }
         }
       } catch (error) {
+        if (!active) return;
         notifications.show({
           title: 'Error',
           message: 'Failed to fetch history',
           color: 'red',
         });
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
     fetchHistory();
+    return () => { active = false; };
   }, [activePage]);
+
+  const toggleFinished = async (id, currentStatus) => {
+    if (togglingIds.has(id)) return;
+    
+    setTogglingIds(prev => new Set(prev).add(id));
+    try {
+      const newStatus = !currentStatus;
+      await axios.post(`${API_BASE}/finished/${id}`, { finished: newStatus });
+      setHistory(prev => prev.map(item => item.id === id ? { ...item, finished: newStatus } : item));
+      notifications.show({
+        title: 'Success',
+        message: newStatus ? 'Marked as read' : 'Marked as unread',
+        color: 'teal',
+      });
+    } catch (error) {
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to update status',
+        color: 'red',
+      });
+    } finally {
+      setTogglingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -92,11 +128,32 @@ export function HistoryPage({ isMobile }) {
   };
 
   const HistoryCard = ({ item }) => (
-    <Card withBorder shadow="sm" radius="md" padding="md">
+    <Card 
+      withBorder 
+      shadow="sm" 
+      radius="md" 
+      padding="md" 
+      style={{ 
+        backgroundColor: item.finished ? 'rgba(64, 192, 87, 0.1)' : undefined,
+        opacity: item.finished ? 0.8 : 1 
+      }}
+    >
       <Stack gap="xs">
-        <Text fw={700} size="lg" lineClamp={2}>
-          {item.title}
-        </Text>
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <Text fw={700} size="lg" lineClamp={2}>
+            {item.title}
+          </Text>
+          <ActionIcon 
+            variant={item.finished ? "filled" : "outline"} 
+            color={item.finished ? "teal" : "gray"}
+            onClick={() => toggleFinished(item.id, item.finished)}
+            size="lg"
+            radius="xl"
+            loading={togglingIds.has(item.id)}
+          >
+            {item.finished ? <IconCheck size={20} /> : <IconBook size={20} />}
+          </ActionIcon>
+        </Group>
         <Text size="sm" c="dimmed">
           {item.authors}
         </Text>
@@ -125,11 +182,17 @@ export function HistoryPage({ isMobile }) {
           History
         </Title>
         
-        <Group grow style={{ width: '100%', maxWidth: 400 }} gap="md">
+        <Group grow style={{ width: '100%', maxWidth: 500 }} gap="md">
           <Card withBorder padding="xs" radius="md" >
             <Stack gap={0} align="center">
-              <Text size="xs" c="dimmed" fw={500} tt="uppercase">Sent to Kindle</Text>
+              <Text size="xs" c="dimmed" fw={500} tt="uppercase">Kindle</Text>
               <Text size="xl" fw={900}>{stats.sent_to_kindle}</Text>
+            </Stack>
+          </Card>
+          <Card withBorder padding="xs" radius="md" >
+            <Stack gap={0} align="center">
+              <Text size="xs" c="dimmed" fw={500} tt="uppercase">Read</Text>
+              <Text size="xl" fw={900}>{stats.read}</Text>
             </Stack>
           </Card>
           <Card withBorder padding="xs" radius="md" >
@@ -166,11 +229,18 @@ export function HistoryPage({ isMobile }) {
                     <Table.Th>Author</Table.Th>
                     <Table.Th>Date</Table.Th>
                     <Table.Th>Status</Table.Th>
+                    <Table.Th>Finished</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
                   {history.map((item) => (
-                    <Table.Tr key={item.id}>
+                    <Table.Tr 
+                      key={item.id} 
+                      style={{ 
+                        backgroundColor: item.finished ? 'rgba(64, 192, 87, 0.1)' : undefined,
+                        opacity: item.finished ? 0.8 : 1 
+                      }}
+                    >
                       <Table.Td>
                         <Text fw={500} size="sm" lineClamp={2}>
                           {item.title}
@@ -184,6 +254,19 @@ export function HistoryPage({ isMobile }) {
                         <Badge color={getStatusColor(item.status)} variant="filled">
                           {item.status.replace(/-/g, ' ')}
                         </Badge>
+                      </Table.Td>
+                      <Table.Td>
+                        <Tooltip label={item.finished ? "Mark as unread" : "Mark as read"}>
+                          <ActionIcon 
+                            variant={item.finished ? "filled" : "light"} 
+                            color={item.finished ? "teal" : "gray"}
+                            onClick={() => toggleFinished(item.id, item.finished)}
+                            radius="xl"
+                            loading={togglingIds.has(item.id)}
+                          >
+                            {item.finished ? <IconCheck size={16} /> : <IconBook size={16} />}
+                          </ActionIcon>
+                        </Tooltip>
                       </Table.Td>
                     </Table.Tr>
                   ))}
