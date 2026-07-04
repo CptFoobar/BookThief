@@ -109,13 +109,20 @@ def get_status_db(book_id):
         row = cursor.fetchone()
         return dict(row) if row else None
 
-def get_all_downloads(limit: int = 1000, offset: int = 0):
+def get_all_downloads(limit: int = 1000, offset: int = 0, search: str = None):
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
+        where_clause = ""
+        params = []
+        if search:
+            where_clause = " WHERE title LIKE ? OR authors LIKE ?"
+            search_param = f"%{search}%"
+            params = [search_param, search_param]
+        
         # Get total count
-        cursor.execute("SELECT COUNT(*) FROM downloads")
+        cursor.execute(f"SELECT COUNT(*) FROM downloads{where_clause}", params)
         total_count = cursor.fetchone()[0]
         
         # Get status stats
@@ -128,7 +135,8 @@ def get_all_downloads(limit: int = 1000, offset: int = 0):
         read_count = cursor.fetchone()[0]
         
         # Get paginated results
-        cursor.execute("SELECT * FROM downloads ORDER BY timestamp DESC LIMIT ? OFFSET ?", (limit, offset))
+        query_params = params + [limit, offset]
+        cursor.execute(f"SELECT * FROM downloads{where_clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?", query_params)
         rows = cursor.fetchall()
         
         return {

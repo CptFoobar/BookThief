@@ -14,9 +14,10 @@ import {
   Pagination,
   ActionIcon,
   Tooltip,
+  TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconBook } from '@tabler/icons-react';
+import { IconCheck, IconBook, IconSearch } from '@tabler/icons-react';
 import axios from 'axios';
 import { DateTime } from 'luxon';
 import lootImg from '../assets/book-thief-loot.jpeg';
@@ -29,8 +30,18 @@ export function HistoryPage({ isMobile }) {
   const [stats, setStats] = useState({ sent_to_kindle: 0, downloading: 0, read: 0 });
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [togglingIds, setTogglingIds] = useState(new Set());
   const itemsPerPage = 10;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+      setActivePage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
@@ -40,7 +51,7 @@ export function HistoryPage({ isMobile }) {
       setLoading(true);
       try {
         const response = await axios.get(`${API_BASE}/downloads`, {
-          params: { page: activePage, limit: itemsPerPage }
+          params: { page: activePage, limit: itemsPerPage, search: debouncedSearch }
         });
         
         if (!active) return;
@@ -70,7 +81,7 @@ export function HistoryPage({ isMobile }) {
     };
     fetchHistory();
     return () => { active = false; };
-  }, [activePage]);
+  }, [activePage, debouncedSearch]);
 
   const toggleFinished = async (id, currentStatus) => {
     if (togglingIds.has(id)) return;
@@ -202,6 +213,16 @@ export function HistoryPage({ isMobile }) {
             </Stack>
           </Card>
         </Group>
+
+        <TextInput
+          placeholder="Search history by title or author..."
+          size="md"
+          style={{ width: '100%', maxWidth: 600 }}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          leftSection={<IconSearch size={18} />}
+          clearable
+        />
       </Stack>
 
       {loading ? (
@@ -210,7 +231,9 @@ export function HistoryPage({ isMobile }) {
         </Center>
       ) : (!history || history.length === 0) ? (
         <Center mt="xl">
-          <Text fw={700} size="xl" c="black">No history yet</Text>
+          <Text fw={700} size="xl" c="black">
+            {debouncedSearch ? `No results found for "${debouncedSearch}"` : "No history yet"}
+          </Text>
         </Center>
       ) : (
         <Stack mt="xl" gap="md">

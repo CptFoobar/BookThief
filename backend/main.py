@@ -345,9 +345,9 @@ def get_status(download_id: str):
     raise HTTPException(status_code=404, detail="Download not found")
 
 @app.get("/downloads")
-def list_downloads(page: int = 1, limit: int = 20):
+def list_downloads(page: int = 1, limit: int = 20, search: Optional[str] = None):
     offset = (page - 1) * limit
-    return get_all_downloads(limit=limit, offset=offset)
+    return get_all_downloads(limit=limit, offset=offset, search=search)
 
 if __name__ == "__main__":
     import uvicorn
