@@ -23,6 +23,7 @@ def init_db():
                 status TEXT,
                 file_path TEXT,
                 finished INTEGER DEFAULT 0,
+                deleted INTEGER DEFAULT 0,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -33,6 +34,10 @@ def init_db():
         if 'finished' not in columns:
             log_debug("Adding 'finished' column to downloads table")
             cursor.execute("ALTER TABLE downloads ADD COLUMN finished INTEGER DEFAULT 0")
+        
+        if 'deleted' not in columns:
+            log_debug("Adding 'deleted' column to downloads table")
+            cursor.execute("ALTER TABLE downloads ADD COLUMN deleted INTEGER DEFAULT 0")
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_downloads_timestamp ON downloads(timestamp)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status)")
@@ -101,6 +106,14 @@ def toggle_finished(book_id, finished):
         cursor.execute("UPDATE downloads SET finished = ? WHERE id = ?", (1 if finished else 0, book_id))
         conn.commit()
 
+def mark_as_deleted(book_id):
+    safe_id = str(book_id).replace('\n', '').replace('\r', '')
+    log_debug(f"Marking {safe_id} as deleted")
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE downloads SET deleted = 1 WHERE id = ?", (book_id,))
+        conn.commit()
+
 def get_status_db(book_id):
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -114,10 +127,10 @@ def get_all_downloads(limit: int = 1000, offset: int = 0, search: str = None):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        where_clause = ""
+        where_clause = " WHERE deleted = 0"
         params = []
         if search:
-            where_clause = " WHERE title LIKE ? OR authors LIKE ?"
+            where_clause += " AND (title LIKE ? OR authors LIKE ?)"
             search_param = f"%{search}%"
             params = [search_param, search_param]
         
@@ -126,12 +139,12 @@ def get_all_downloads(limit: int = 1000, offset: int = 0, search: str = None):
         total_count = cursor.fetchone()[0]
         
         # Get status stats
-        cursor.execute("SELECT status, COUNT(*) FROM downloads GROUP BY status")
+        cursor.execute("SELECT status, COUNT(*) FROM downloads WHERE deleted = 0 GROUP BY status")
         stats_rows = cursor.fetchall()
         stats = {row[0]: row[1] for row in stats_rows}
         
         # Get finished count
-        cursor.execute("SELECT COUNT(*) FROM downloads WHERE finished = 1")
+        cursor.execute("SELECT COUNT(*) FROM downloads WHERE finished = 1 AND deleted = 0")
         read_count = cursor.fetchone()[0]
         
         # Get paginated results

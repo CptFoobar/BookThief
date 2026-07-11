@@ -9,12 +9,10 @@ import {
   Stack,
   ActionIcon,
   Badge,
-  Loader,
   Center,
   Image,
   Card,
   Divider,
-  rem,
 } from '@mantine/core';
 import {
   IconSearch,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Table,
@@ -17,7 +17,8 @@ import {
   TextInput,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconCheck, IconBook, IconSearch } from '@tabler/icons-react';
+import { modals } from '@mantine/modals';
+import { IconCheck, IconBook, IconSearch, IconTrash } from '@tabler/icons-react';
 import axios from 'axios';
 import { DateTime } from 'luxon';
 import lootImg from '../assets/book-thief-loot.jpeg';
@@ -33,6 +34,7 @@ export function HistoryPage({ isMobile }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [togglingIds, setTogglingIds] = useState(new Set());
+  const [deletingIds, setDeletingIds] = useState(new Set());
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -44,44 +46,46 @@ export function HistoryPage({ isMobile }) {
   }, [search]);
 
   const totalPages = Math.ceil(totalItems / itemsPerPage);
+  
+  const fetchHistory = useCallback(async (active = true) => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`${API_BASE}/downloads`, {
+        params: { page: activePage, limit: itemsPerPage, search: debouncedSearch }
+      });
+      
+      if (!active) return;
+
+      const data = response.data;
+      if (Array.isArray(data)) {
+        // Fallback for old API format
+        setHistory(data);
+        setTotalItems(data.length);
+      } else {
+        setHistory(data.items || []);
+        setTotalItems(data.total || 0);
+        if (data.stats) {
+          setStats(data.stats);
+        }
+      }
+    } catch {
+      if (!active) return;
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to fetch history',
+        color: 'red',
+      });
+    } finally {
+      if (active) setLoading(false);
+    }
+  }, [activePage, debouncedSearch]);
 
   useEffect(() => {
     let active = true;
-    const fetchHistory = async () => {
-      setLoading(true);
-      try {
-        const response = await axios.get(`${API_BASE}/downloads`, {
-          params: { page: activePage, limit: itemsPerPage, search: debouncedSearch }
-        });
-        
-        if (!active) return;
-
-        const data = response.data;
-        if (Array.isArray(data)) {
-          // Fallback for old API format
-          setHistory(data);
-          setTotalItems(data.length);
-        } else {
-          setHistory(data.items || []);
-          setTotalItems(data.total || 0);
-          if (data.stats) {
-            setStats(data.stats);
-          }
-        }
-      } catch (error) {
-        if (!active) return;
-        notifications.show({
-          title: 'Error',
-          message: 'Failed to fetch history',
-          color: 'red',
-        });
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-    fetchHistory();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchHistory(active);
     return () => { active = false; };
-  }, [activePage, debouncedSearch]);
+  }, [fetchHistory]);
 
   const toggleFinished = async (id, currentStatus) => {
     if (togglingIds.has(id)) return;
@@ -96,7 +100,7 @@ export function HistoryPage({ isMobile }) {
         message: newStatus ? 'Marked as read' : 'Marked as unread',
         color: 'teal',
       });
-    } catch (error) {
+    } catch {
       notifications.show({
         title: 'Error',
         message: 'Failed to update status',
@@ -110,6 +114,44 @@ export function HistoryPage({ isMobile }) {
       });
     }
   };
+
+  const deleteEntry = async (id) => {
+    setDeletingIds(prev => new Set(prev).add(id));
+    try {
+      await axios.delete(`${API_BASE}/downloads/${id}`);
+      notifications.show({
+        title: 'Success',
+        message: 'Entry removed from history',
+        color: 'teal',
+      });
+      fetchHistory();
+    } catch {
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to delete entry',
+        color: 'red',
+      });
+    } finally {
+      setDeletingIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const openDeleteModal = (id) => modals.openConfirmModal({
+    title: 'Delete history entry',
+    centered: true,
+    children: (
+      <Text size="sm">
+        Are you sure you want to delete this entry from history? This action cannot be undone.
+      </Text>
+    ),
+    labels: { confirm: 'Delete', cancel: 'Cancel' },
+    confirmProps: { color: 'red' },
+    onConfirm: () => deleteEntry(id),
+  });
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -154,16 +196,28 @@ export function HistoryPage({ isMobile }) {
           <Text fw={700} size="lg" lineClamp={2}>
             {item.title}
           </Text>
-          <ActionIcon 
-            variant={item.finished ? "filled" : "outline"} 
-            color={item.finished ? "teal" : "gray"}
-            onClick={() => toggleFinished(item.id, item.finished)}
-            size="lg"
-            radius="xl"
-            loading={togglingIds.has(item.id)}
-          >
-            {item.finished ? <IconCheck size={20} /> : <IconBook size={20} />}
-          </ActionIcon>
+          <Group gap="xs" wrap="nowrap">
+            <ActionIcon 
+              variant={item.finished ? "filled" : "outline"} 
+              color={item.finished ? "teal" : "gray"}
+              onClick={() => toggleFinished(item.id, item.finished)}
+              size="lg"
+              radius="xl"
+              loading={togglingIds.has(item.id)}
+            >
+              {item.finished ? <IconCheck size={20} /> : <IconBook size={20} />}
+            </ActionIcon>
+            <ActionIcon 
+              variant="light" 
+              color="red"
+              onClick={() => openDeleteModal(item.id)}
+              size="lg"
+              radius="xl"
+              loading={deletingIds.has(item.id)}
+            >
+              <IconTrash size={20} />
+            </ActionIcon>
+          </Group>
         </Group>
         <Text size="sm" c="dimmed">
           {item.authors}
@@ -252,7 +306,7 @@ export function HistoryPage({ isMobile }) {
                     <Table.Th>Author</Table.Th>
                     <Table.Th>Date</Table.Th>
                     <Table.Th>Status</Table.Th>
-                    <Table.Th>Finished</Table.Th>
+                    <Table.Th>Actions</Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -279,17 +333,30 @@ export function HistoryPage({ isMobile }) {
                         </Badge>
                       </Table.Td>
                       <Table.Td>
-                        <Tooltip label={item.finished ? "Mark as unread" : "Mark as read"}>
-                          <ActionIcon 
-                            variant={item.finished ? "filled" : "light"} 
-                            color={item.finished ? "teal" : "gray"}
-                            onClick={() => toggleFinished(item.id, item.finished)}
-                            radius="xl"
-                            loading={togglingIds.has(item.id)}
-                          >
-                            {item.finished ? <IconCheck size={16} /> : <IconBook size={16} />}
-                          </ActionIcon>
-                        </Tooltip>
+                        <Group gap="xs">
+                          <Tooltip label={item.finished ? "Mark as unread" : "Mark as read"}>
+                            <ActionIcon 
+                              variant={item.finished ? "filled" : "light"} 
+                              color={item.finished ? "teal" : "gray"}
+                              onClick={() => toggleFinished(item.id, item.finished)}
+                              radius="xl"
+                              loading={togglingIds.has(item.id)}
+                            >
+                              {item.finished ? <IconCheck size={16} /> : <IconBook size={16} />}
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Delete from history">
+                            <ActionIcon 
+                              variant="light" 
+                              color="red"
+                              onClick={() => openDeleteModal(item.id)}
+                              radius="xl"
+                              loading={deletingIds.has(item.id)}
+                            >
+                              <IconTrash size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
                       </Table.Td>
                     </Table.Tr>
                   ))}

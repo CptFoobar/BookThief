@@ -6,6 +6,7 @@ import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
+import { ModalsProvider } from '@mantine/modals';
 
 const theme = createTheme({
   primaryColor: 'beige',
@@ -37,9 +38,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <MantineProvider theme={theme}>
       <Notifications />
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <ModalsProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </ModalsProvider>
     </MantineProvider>
   </React.StrictMode>,
 )

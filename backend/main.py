@@ -10,7 +10,7 @@ import urllib3
 import sqlite3
 import time
 from urllib.parse import quote
-from database import init_db, save_download, update_status, get_all_downloads, get_status_db, toggle_finished, log_debug
+from database import init_db, save_download, update_status, get_all_downloads, get_status_db, toggle_finished, mark_as_deleted, log_debug
 from mailer import send_to_kindle
 from dotenv import load_dotenv
 
@@ -320,6 +320,16 @@ def mark_as_finished(book_id: str, req: FinishedRequest):
     except Exception as e:
         safe_id = str(book_id).replace('\n', '').replace('\r', '')
         log_debug(f"Error updating finished status for {safe_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.delete("/downloads/{book_id}")
+def delete_download(book_id: str):
+    try:
+        mark_as_deleted(book_id)
+        return {"message": "Download deleted from history"}
+    except Exception as e:
+        safe_id = str(book_id).replace('\n', '').replace('\r', '')
+        log_debug(f"Error deleting download {safe_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/status/{download_id}")

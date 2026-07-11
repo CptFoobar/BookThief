@@ -48,7 +48,7 @@ function App() {
         params: { query },
       });
       setBooks(response.data);
-    } catch (error) {
+    } catch {
       notifications.show({
         title: 'Error',
         message: 'Failed to fetch results',
@@ -181,7 +181,7 @@ function App() {
               withCloseButton: true,
             });
           }
-        } catch (err) {
+        } catch {
           if (attempts > 60) {
             clearInterval(interval);
             setDownloading((prev) => ({ ...prev, [book.id]: false }));
@@ -197,7 +197,7 @@ function App() {
           }
         }
       }, 2000);
-    } catch (error) {
+    } catch {
       setDownloading((prev) => ({ ...prev, [book.id]: false }));
       notifications.update({
         id: notificationId,
