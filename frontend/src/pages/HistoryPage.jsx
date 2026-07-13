@@ -23,7 +23,7 @@ import axios from 'axios';
 import { DateTime } from 'luxon';
 import lootImg from '../assets/book-thief-loot.jpeg';
 
-const API_BASE = `http://${window.location.hostname}:8000`;
+const API_BASE = `http://${window.location.hostname}:8111`;
 
 export function HistoryPage({ isMobile }) {
   const [history, setHistory] = useState([]);

@@ -361,4 +361,4 @@ def list_downloads(page: int = 1, limit: int = 20, search: Optional[str] = None)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8111, reload=True)

@@ -24,7 +24,7 @@ import { SearchPage } from './pages/SearchPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { SidebarLink } from './components/SidebarLink';
 
-const API_BASE = `http://${window.location.hostname}:8000`;
+const API_BASE = `http://${window.location.hostname}:8111`;
 
 function App() {
   const [query, setQuery] = useState('');

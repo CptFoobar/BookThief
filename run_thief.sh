@@ -27,7 +27,7 @@ python3 main.py >> "../$LOG_FILE" 2>&1 &
 
 echo "[$(date)] Starting Frontend..." >> "../$LOG_FILE"
 cd ../frontend
-npm run dev -- --host --port 3000 >> "../$LOG_FILE" 2>&1 &
+npm run dev -- --host 0.0.0.0 --port 3000 >> "../$LOG_FILE" 2>&1 &
 
 # Wait for processes
 wait
